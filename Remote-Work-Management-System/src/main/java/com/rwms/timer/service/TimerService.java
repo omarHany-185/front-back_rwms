@@ -129,13 +129,46 @@ public class TimerService {
         workSessionRepository.save(session);
     }
 
+    public WorkSessionResponse pauseSession(String employeeEmail) {
+        User employee = userRepository.findByEmail(employeeEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        WorkSession session = workSessionRepository.findActiveByEmployeeId(employee.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("No active session found"));
+        session.setState(WorkSession.SessionState.ON_BREAK);
+        return toResponse(workSessionRepository.save(session));
+    }
+
+    public WorkSessionResponse resumeSession(String employeeEmail) {
+        User employee = userRepository.findByEmail(employeeEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        WorkSession session = workSessionRepository.findActiveByEmployeeId(employee.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("No active session found"));
+        session.setState(WorkSession.SessionState.RUNNING);
+        return toResponse(workSessionRepository.save(session));
+    }
+
     public List<TeamWorkStatusResponse> getTeamWorkStatus(List<Long> employeeIds) {
-        List<WorkSession> sessions = workSessionRepository.findActiveByEmployeeIdIn(employeeIds);
-        return sessions.stream().map(s -> TeamWorkStatusResponse.builder()
-                .employeeId(s.getEmployee().getId())
-                .sessionState(s.getState().name())
-                .workedSeconds(s.getWorkedSeconds())
-                .breakSeconds(s.getBreakSeconds())
-                .build()).collect(Collectors.toList());
+        LocalDateTime todayStart = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
+        List<WorkSession> allSessions = workSessionRepository.findByEmployeeIdInAndSessionStartedAtAfter(employeeIds, todayStart);
+        // Take the latest session per employee (most recent state) and sum all worked seconds for the day
+        java.util.Map<Long, TeamWorkStatusResponse> map = new java.util.HashMap<>();
+        for (WorkSession s : allSessions) {
+            TeamWorkStatusResponse existing = map.get(s.getEmployee().getId());
+            if (existing == null) {
+                map.put(s.getEmployee().getId(), TeamWorkStatusResponse.builder()
+                        .employeeId(s.getEmployee().getId())
+                        .sessionState(s.getState().name())
+                        .workedSeconds(s.getWorkedSeconds())
+                        .breakSeconds(s.getBreakSeconds())
+                        .build());
+            } else {
+                // Sum up worked seconds across all sessions today
+                existing.setWorkedSeconds(existing.getWorkedSeconds() + s.getWorkedSeconds());
+                existing.setBreakSeconds(existing.getBreakSeconds() + s.getBreakSeconds());
+                // Keep the latest session state
+                existing.setSessionState(s.getState().name());
+            }
+        }
+        return new java.util.ArrayList<>(map.values());
     }
 }

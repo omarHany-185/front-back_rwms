@@ -42,6 +42,16 @@ public class TimerController {
         return ResponseEntity.ok().build();
     }
 
+    @PostMapping("/pause")
+    public ResponseEntity<WorkSessionResponse> pauseSession(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(timerService.pauseSession(user.getEmail()));
+    }
+
+    @PostMapping("/resume")
+    public ResponseEntity<WorkSessionResponse> resumeSession(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(timerService.resumeSession(user.getEmail()));
+    }
+
     @GetMapping("/team")
     public ResponseEntity<List<TeamWorkStatusResponse>> getTeamWorkStatus(@RequestParam List<Long> employeeIds) {
         return ResponseEntity.ok(timerService.getTeamWorkStatus(employeeIds));
