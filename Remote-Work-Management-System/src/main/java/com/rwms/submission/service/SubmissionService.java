@@ -54,6 +54,8 @@ public class SubmissionService {
         return SubmissionResponse.builder()
                 .id(sub.getId())
                 .taskName(sub.getTask().getName())
+                .employeeId(sub.getEmployee().getId())
+                .employeeName(sub.getEmployee().getFullName())
                 .submittedAt(sub.getSubmittedAt())
                 .reviewStatus(sub.getReviewStatus().name())
                 .rejectionReason(sub.getRejectionReason())
