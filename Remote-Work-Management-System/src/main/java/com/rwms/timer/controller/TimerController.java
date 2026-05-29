@@ -1,11 +1,14 @@
 package com.rwms.timer.controller;
 
+import com.rwms.timer.dto.TeamWorkStatusResponse;
 import com.rwms.timer.dto.WorkSessionResponse;
 import com.rwms.timer.service.TimerService;
 import com.rwms.user.entity.User;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/timer")
@@ -37,5 +40,10 @@ public class TimerController {
     public ResponseEntity<Void> endSession(@AuthenticationPrincipal User user) {
         timerService.endSession(user.getEmail());
         return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/team")
+    public ResponseEntity<List<TeamWorkStatusResponse>> getTeamWorkStatus(@RequestParam List<Long> employeeIds) {
+        return ResponseEntity.ok(timerService.getTeamWorkStatus(employeeIds));
     }
 }

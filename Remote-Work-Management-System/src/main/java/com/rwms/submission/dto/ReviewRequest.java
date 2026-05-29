@@ -13,4 +13,6 @@ public class ReviewRequest {
     private String action; // "APPROVE" or "REJECT"
 
     private String rejectionReason;
+
+    private String adminNote;
 }

@@ -173,6 +173,14 @@ const taskService = {
         }
     },
 
+    async getTeamWorkStatus(employeeIds) {
+        const response = await api.timer.getTeamStatus(employeeIds);
+        if (!response.ok) {
+            throw new Error(response.error?.message || 'Could not fetch team work status');
+        }
+        return response.data || [];
+    },
+
     /**
      * Pure logic check: is a task ready for submission?
      */

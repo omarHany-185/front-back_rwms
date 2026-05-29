@@ -3,6 +3,7 @@ package com.rwms.timer.service;
 import com.rwms.common.exception.ResourceNotFoundException;
 import com.rwms.task.entity.Task;
 import com.rwms.task.repository.TaskRepository;
+import com.rwms.timer.dto.TeamWorkStatusResponse;
 import com.rwms.timer.dto.WorkSessionResponse;
 import com.rwms.timer.entity.WorkSession;
 import com.rwms.timer.repository.WorkSessionRepository;
@@ -12,6 +13,8 @@ import com.rwms.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class TimerService {
@@ -124,5 +127,15 @@ public class TimerService {
 
         session.setState(WorkSession.SessionState.COMPLETED);
         workSessionRepository.save(session);
+    }
+
+    public List<TeamWorkStatusResponse> getTeamWorkStatus(List<Long> employeeIds) {
+        List<WorkSession> sessions = workSessionRepository.findActiveByEmployeeIdIn(employeeIds);
+        return sessions.stream().map(s -> TeamWorkStatusResponse.builder()
+                .employeeId(s.getEmployee().getId())
+                .sessionState(s.getState().name())
+                .workedSeconds(s.getWorkedSeconds())
+                .breakSeconds(s.getBreakSeconds())
+                .build()).collect(Collectors.toList());
     }
 }

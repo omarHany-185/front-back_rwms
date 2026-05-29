@@ -67,8 +67,9 @@ export class RwmsModel {
             submissionForm: {
                 accomplishmentComment: '',
                 alternativeGithubLink: '',
-                file: null
+                fileName: null
             },
+            submissionFile: null,
 
             // Team Leader/Admin: review submission modal + comment thread
             showReviewModal: false,
@@ -142,6 +143,7 @@ export class RwmsModel {
 
             // Employee Context Data
             timerRunning: false,
+            timerPaused: false,
             shiftTime: 0,
             activeWorkTime: 0,
             breakTime: 0,
@@ -151,6 +153,7 @@ export class RwmsModel {
             activeTaskIndex: -1,
             activeTask: null,
             assignedTasks: [],
+            mySubmissions: [],
             myProjects: [],
 
             // API-loaded data

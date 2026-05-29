@@ -21,13 +21,15 @@ export function clearAuthToken() {
 export function createRealApi({ baseURL = DEFAULT_BASE_URL } = {}) {
     const axiosInstance = axios.create({
         baseURL,
-        timeout: 20000,
-        headers: {
-            'Content-Type': 'application/json'
-        }
+        timeout: 20000
     });
 
     axiosInstance.interceptors.request.use(config => {
+        // Set JSON content type for non-FormData requests
+        if (config.data && !(config.data instanceof FormData)) {
+            config.headers = config.headers || {};
+            config.headers['Content-Type'] = 'application/json';
+        }
         if (authToken) {
             config.headers = config.headers || {};
             config.headers.Authorization = `Bearer ${authToken}`;
@@ -123,22 +125,30 @@ export function createRealApi({ baseURL = DEFAULT_BASE_URL } = {}) {
                 if (file) {
                     formData.append('file', file);
                 }
-                return axiosInstance.post(`/submissions/task/${taskId}`, formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                });
+                return axiosInstance.post(`/submissions/task/${taskId}`, formData);
             },
             getMy: () => axiosInstance.get('/submissions/my'),
             getDetail: (submissionId) => axiosInstance.get(`/submissions/${submissionId}/detail`),
             review: (submissionId, data) => axiosInstance.post(`/submissions/${submissionId}/review`, data),
             getPendingByProject: (projectId) => axiosInstance.get(`/submissions/pending/project/${projectId}`),
             addComment: (submissionId, data) => axiosInstance.post(`/submissions/${submissionId}/comments`, data),
-            getComments: (submissionId) => axiosInstance.get(`/submissions/${submissionId}/comments`)
+            getComments: (submissionId) => axiosInstance.get(`/submissions/${submissionId}/comments`),
+            downloadFile: async (submissionId) => {
+                const response = await axiosInstance.get(`/submissions/${submissionId}/file`, {
+                    responseType: 'blob'
+                });
+                const disposition = response.headers['content-disposition'] || '';
+                const match = disposition.match(/filename="(.+?)"/);
+                const filename = match ? match[1] : 'attachment';
+                return { blob: response.data, filename };
+            }
         },
         timer: {
             start: (taskId) => axiosInstance.post(`/timer/start/${taskId}`),
             getActive: () => axiosInstance.get('/timer/active'),
             sync: () => axiosInstance.post('/timer/sync'),
-            end: () => axiosInstance.post('/timer/end')
+            end: () => axiosInstance.post('/timer/end'),
+            getTeamStatus: (employeeIds) => axiosInstance.get('/timer/team', { params: { employeeIds: employeeIds.join(',') } })
         }
     };
 }

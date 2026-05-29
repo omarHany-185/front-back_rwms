@@ -59,6 +59,7 @@ public class SubmissionService {
                 .submittedAt(sub.getSubmittedAt())
                 .reviewStatus(sub.getReviewStatus().name())
                 .rejectionReason(sub.getRejectionReason())
+                .adminNote(sub.getAdminNote())
                 .build();
     }
 
@@ -159,6 +160,10 @@ public class SubmissionService {
             throw new IllegalArgumentException("Invalid action. Use APPROVE or REJECT");
         }
 
+        if (request.getAdminNote() != null) {
+            submission.setAdminNote(request.getAdminNote());
+        }
+
         taskRepository.save(task);
         return toResponse(submissionRepository.save(submission));
     }
@@ -179,12 +184,16 @@ public class SubmissionService {
                         .build())
                 .collect(Collectors.toList());
 
+        List<CommentResponse> comments = commentRepository.findBySubmissionIdOrderByCreatedAtAsc(submissionId)
+                .stream().map(this::toCommentResponse).collect(Collectors.toList());
+
         return SubmissionDetailResponse.builder()
                 .submissionInfo(toResponse(sub))
                 .subtasks(subtasks)
                 .accomplishmentComment(sub.getAccomplishmentComment())
                 .attachmentPath(sub.getAttachmentPath())
                 .alternativeGithubLink(sub.getAlternativeGithubLink())
+                .comments(comments)
                 .build();
     }
 
@@ -198,6 +207,12 @@ public class SubmissionService {
     public List<SubmissionResponse> getPendingSubmissionsByProject(Long projectId) {
         return submissionRepository.findPendingByProjectId(projectId)
                 .stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    public String getAttachmentPath(Long submissionId) {
+        TaskSubmission sub = submissionRepository.findById(submissionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Submission not found"));
+        return sub.getAttachmentPath();
     }
 
     // --- Comments & Notes ---

@@ -176,7 +176,7 @@ export const usersApi = {
      */
     getAll: async () => {
         await delay();
-        return createResponse(Object.values(DUMMY_USERS));
+        return createResponse(Object.values(usersStore));
     },
 
     /**
@@ -235,8 +235,11 @@ export const usersApi = {
             return createErrorResponse('Email already exists', 409);
         }
 
+        const maxId = Object.values(usersStore).length
+            ? Math.max(...Object.values(usersStore).map(u => u.id))
+            : 0;
         const newUser = {
-            id: Math.max(...Object.values(DUMMY_USERS).map(u => u.id)) + 1,
+            id: maxId + 1,
             fullName,
             employeeId,
             email,
@@ -249,7 +252,7 @@ export const usersApi = {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
-
+        usersStore[newUser.id] = newUser;
         return createResponse(newUser, 201);
     },
 
@@ -295,7 +298,7 @@ export const managerApi = {
     /**
      * POST /manager/approve-admin/{userId}
      */
-    approveAdmin: async (userId) => {
+    approveAdmin: async (userId, employeeId) => {
         await delay();
         const user = findUserByIdFromStore(userId);
 
@@ -309,6 +312,9 @@ export const managerApi = {
 
         user.status = 'ACTIVE';
         user.firstLogin = true;
+        if (employeeId) {
+            user.employeeId = employeeId;
+        }
         return createResponse({ message: 'Team leader approved successfully' });
     },
 
@@ -468,14 +474,15 @@ export const projectsApi = {
      */
     create: async (data) => {
         await delay();
-
-        return createResponse({
+        const newProject = {
             id: Math.random(),
             ...data,
-            teamLeaderId: null,
+            teamLeaderId: currentUserId,
             contributors: [],
             createdAt: new Date().toISOString()
-        }, 201);
+        };
+        projectsStore.push(newProject);
+        return createResponse(newProject, 201);
     },
 
     /**
@@ -520,8 +527,22 @@ export const projectsApi = {
      */
     addContributors: async (projectId, userIds) => {
         await delay();
-
-        return createResponse({ message: 'Contributors added' });
+        const project = projectsStore.find(p => p.id === parseInt(projectId));
+        const users = Object.values(usersStore);
+        if (project && Array.isArray(userIds)) {
+            for (const uid of userIds) {
+                const user = users.find(u => u.id === parseInt(uid));
+                if (user && !project.contributors.some(c => c.id === user.id)) {
+                    project.contributors.push({
+                        id: user.id,
+                        fullName: user.fullName,
+                        email: user.email,
+                        role: user.role
+                    });
+                }
+            }
+        }
+        return createResponse(project || { message: 'Contributors added' });
     },
 
     /**
@@ -529,8 +550,11 @@ export const projectsApi = {
      */
     removeContributor: async (projectId, userId) => {
         await delay();
-
-        return createResponse({ message: 'Contributor removed' });
+        const project = projectsStore.find(p => p.id === parseInt(projectId));
+        if (project) {
+            project.contributors = project.contributors.filter(c => c.id !== parseInt(userId));
+        }
+        return createResponse(project || { message: 'Contributor removed' });
     },
 
     /**
@@ -573,16 +597,24 @@ export const tasksApi = {
      */
     create: async (projectId, data) => {
         await delay();
-
-        return createResponse({
+        const newTask = {
             id: Math.random(),
             ...data,
             projectId: parseInt(projectId),
             status: 'PENDING',
             createdAt: new Date().toISOString(),
             startedAt: null,
-            subtasks: data.subtasks || []
-        }, 201);
+            subtasks: (data.subtasks || []).map((s, idx) => ({
+                ...s,
+                id: s.id || idx + 1,
+                completedByEmployee: false,
+                approvedByAdmin: false,
+                completedAt: null,
+                employeeComment: null
+            }))
+        };
+        tasksStore.push(newTask);
+        return createResponse(newTask, 201);
     },
 
     /**
@@ -646,7 +678,10 @@ export const tasksApi = {
      */
     assign: async (taskId, employeeId) => {
         await delay();
-
+        const task = tasksStore.find(t => t.id === parseInt(taskId));
+        if (task) {
+            task.assignedEmployeeId = parseInt(employeeId);
+        }
         return createResponse({ message: 'Task assigned' });
     },
 

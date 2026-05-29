@@ -165,6 +165,28 @@ export class RwmsController {
                 // Load employee tasks via service.
                 this.state.assignedTasks = await taskService.getMyTasks();
 
+                // Restore active work session from backend
+                try {
+                    const session = await taskService.getActiveSession();
+                    if (session) {
+                        this.state.shiftTime = session.workedSeconds || 0;
+                        this.state.activeWorkTime = session.workedSeconds || 0;
+                        this.state.breakTime = session.breakSeconds || 0;
+                        this.state.timerRunning = session.sessionState === 'RUNNING';
+                        this.state.timerPaused = session.sessionState === 'ON_BREAK';
+                        this.state.timerStatus = session.sessionState === 'RUNNING' ? 'Active' : (session.sessionState === 'ON_BREAK' ? 'Paused' : 'Not Started');
+                        // Restart the local timer interval if running
+                        if (this.state.timerRunning && !this.timerInterval) {
+                            this.startTimerInterval();
+                        }
+                    }
+                } catch (_) {
+                    // No active session — fresh start
+                }
+
+                // Load employee submissions.
+                this.state.mySubmissions = await submissionService.getMySubmissions();
+
                 // Load projects the employee is assigned to.
                 this.state.myProjects = await approvalService.getMyProjectsAsEmployee();
             } else if (role === 'TEAM_LEADER') {
@@ -184,6 +206,27 @@ export class RwmsController {
 
                 // Derive contributor list from projects.
                 this.state.teamMembers = approvalService.deriveTeamMembers(projects);
+
+                // Fetch work session status for team members
+                try {
+                    const memberIds = this.state.teamMembers.map(m => m.id).filter(Boolean);
+                    if (memberIds.length) {
+                        const workStatuses = await taskService.getTeamWorkStatus(memberIds);
+                        const statusMap = {};
+                        workStatuses.forEach(ws => { statusMap[ws.employeeId] = ws; });
+                        this.state.teamMembers.forEach(m => {
+                            const ws = statusMap[m.id];
+                            if (ws) {
+                                m.timeWorkedToday = ws.workedSeconds || 0;
+                                m.breakSeconds = ws.breakSeconds || 0;
+                                m.workingStatus = ws.sessionState === 'RUNNING' ? 'Working'
+                                    : ws.sessionState === 'ON_BREAK' ? 'On Break' : 'Online';
+                            } else {
+                                m.workingStatus = 'Online';
+                            }
+                        });
+                    }
+                } catch (_) { /* no work status available */ }
 
                 // Load TL's own project requests and their statuses.
                 this.state.myProjectRequests = await approvalService.getMyProjectRequests();
@@ -356,12 +399,33 @@ export class RwmsController {
         const activeTaskId = taskId || this.state.activeTask?.id;
         if (!activeTaskId) return;
 
+        // If resuming from pause, skip backend calls (task+session already exist)
+        if (this.state.timerPaused) {
+            this.state.timerRunning = true;
+            this.state.timerStatus = 'Active';
+            this.state.timerPaused = false;
+            if (!this.timerInterval) {
+                this.startTimerInterval();
+            }
+            this.setAuthFeedback('Timer resumed.', 'success');
+            return;
+        }
+
         // Mark task as started via service.
         try {
             await taskService.startTask(activeTaskId);
+            // End any stale active session before starting a new one
+            try { await taskService.endTimer(); } catch (_) {}
+            await taskService.startTimer(activeTaskId);
             this.state.assignedTasks = await taskService.getMyTasks();
         } catch (e) {
+            const stuck = (this.state.assignedTasks || []).find(t => t.status === 'IN_PROGRESS');
+            const msg = stuck
+                ? `Cannot start — task "${stuck.title}" (ID: ${stuck.id}) is already IN_PROGRESS. Submit or cancel it first.`
+                : (e.message || 'Could not start task.');
+            this.setAuthFeedback(msg, 'error');
             console.error('Start task error:', e);
+            return;
         }
 
         this.state.activeTaskIndex = this.state.assignedTasks.findIndex(t => t.id === activeTaskId);
@@ -370,47 +434,60 @@ export class RwmsController {
         this.state.timerRunning = true;
         this.state.timerStatus = 'Active';
 
-        // Reset timers for a new local work session.
         this.state.shiftTime = 0;
         this.state.activeWorkTime = 0;
         this.state.breakTime = 0;
+        this.state.timerPaused = false;
         this.state.showTimerWarning = false;
 
-        const SUBMIT_TRIGGER_SECONDS = 30; // Scaled-down for frontend workflow simulation.
-
         if (!this.timerInterval) {
-            this.timerInterval = setInterval(() => {
-                if (!this.state.timerRunning) return;
-
-                this.state.shiftTime++;
-                this.state.activeWorkTime++;
-
-                // Trigger "submit now" after a short simulated session.
-                if (this.state.shiftTime >= SUBMIT_TRIGGER_SECONDS) {
-                    this.stopTimer();
-
-                    const allDone = this.isActiveTaskReadyForSubmission();
-                    if (allDone) {
-                        this.openSubmissionModal();
-                    } else {
-                        this.setAuthFeedback('Finish all subtasks before submitting.', 'error');
-                    }
-                }
-            }, 1000);
+            this.startTimerInterval();
         }
     }
 
-    pauseShift() {
+    startTimerInterval() {
+        let syncCounter = 0;
+        this.timerInterval = setInterval(() => {
+            // Increment work time while running, break time while paused.
+            if (this.state.timerRunning) {
+                this.state.shiftTime++;
+                this.state.activeWorkTime++;
+            } else if (this.state.timerPaused) {
+                this.state.shiftTime++;
+                this.state.breakTime++;
+            }
+            // Sync with backend every 10 seconds for persistence
+            syncCounter++;
+            if (syncCounter >= 10) {
+                syncCounter = 0;
+                taskService.syncTimer().catch(() => {});
+            }
+        }, 1000);
+    }
+
+    async pauseShift() {
+        // Sync timer with backend before pausing
+        try { await taskService.syncTimer(); } catch (_) {}
         this.state.timerRunning = false;
+        this.state.timerPaused = true;
         this.state.timerStatus = 'Paused';
     }
 
     stopTimer() {
         this.state.timerRunning = false;
+        this.state.timerPaused = false;
         this.state.timerStatus = 'Not Started';
         if (this.timerInterval) {
             clearInterval(this.timerInterval);
             this.timerInterval = null;
+        }
+    }
+
+    async endBackendTimer() {
+        try {
+            await taskService.endTimer();
+        } catch (e) {
+            // Ignore if no active session
         }
     }
 
@@ -463,8 +540,9 @@ export class RwmsController {
         this.state.submissionForm = {
             accomplishmentComment: this.state.submissionForm?.accomplishmentComment || '',
             alternativeGithubLink: this.state.submissionForm?.alternativeGithubLink || '',
-            file: this.state.submissionForm?.file || null
+            fileName: this.state.submissionForm?.fileName || null
         };
+        this.state.submissionFile = this.state.submissionFile || null;
         this.setAuthFeedback();
     }
 
@@ -474,8 +552,9 @@ export class RwmsController {
         this.state.submissionForm = {
             accomplishmentComment: '',
             alternativeGithubLink: '',
-            file: null
+            fileName: null
         };
+        this.state.submissionFile = null;
     }
 
     async submitActiveTask() {
@@ -492,7 +571,7 @@ export class RwmsController {
             await submissionService.submitTask(taskId, {
                 accomplishmentComment: this.state.submissionForm.accomplishmentComment,
                 alternativeGithubLink: this.state.submissionForm.alternativeGithubLink
-            }, this.state.submissionForm.file);
+            }, this.state.submissionFile);
 
             this.closeSubmissionModal();
             await this.loadDashboardData(this.state.currentUser.id, this.state.currentRole);
@@ -521,7 +600,10 @@ export class RwmsController {
             const detail = await submissionService.getSubmissionDetail(submissionId);
 
             this.state.activeSubmissionId = submissionId;
-            this.state.activeSubmissionDetail = detail;
+            // Flatten nested submissionInfo for template access
+            this.state.activeSubmissionDetail = detail.submissionInfo
+                ? { ...detail.submissionInfo, ...detail }
+                : detail;
             this.state.showReviewModal = true;
             this.state.reviewBusy = false;
             this.state.reviewForm = {
@@ -550,16 +632,41 @@ export class RwmsController {
         };
     }
 
+    async downloadAttachment(submissionId) {
+        try {
+            const { blob, filename } = await submissionService.downloadFile(submissionId);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            this.setAuthFeedback('Could not download attachment.', 'error');
+            console.error('Download error:', e);
+        }
+    }
+
     async reviewActiveSubmission() {
         if (!this.state.activeSubmissionId) return false;
+
+        // Validate rejection reason
+        const action = this.state.reviewForm.action === 'APPROVED' ? 'APPROVE' : 'REJECT';
+        const rejectionReason = this.state.reviewForm.rejectionReason || '';
+        if (action === 'REJECT' && !rejectionReason.trim()) {
+            this.setAuthFeedback('Please provide a rejection reason.', 'error');
+            return false;
+        }
+
         this.state.reviewBusy = true;
 
         try {
-            const approved = this.state.reviewForm.action === 'APPROVED';
             await submissionService.reviewSubmission(this.state.activeSubmissionId, {
-                approved,
-                adminNote: this.state.reviewForm.adminNote || null,
-                rejectionReason: this.state.reviewForm.rejectionReason || null
+                action,
+                rejectionReason: rejectionReason.trim() || null,
+                adminNote: this.state.reviewForm.adminNote?.trim() || null
             });
 
             this.closeReviewModal();
@@ -588,7 +695,9 @@ export class RwmsController {
 
             // Refresh the modal details so comments render immediately.
             const detail = await submissionService.getSubmissionDetail(this.state.activeSubmissionId);
-            this.state.activeSubmissionDetail = detail;
+            this.state.activeSubmissionDetail = detail.submissionInfo
+                ? { ...detail.submissionInfo, ...detail }
+                : detail;
             this.state.reviewForm.commentContent = '';
             return true;
         } catch (e) {

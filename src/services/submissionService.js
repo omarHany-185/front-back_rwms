@@ -86,6 +86,10 @@ const submissionService = {
             throw new Error(response.error?.message || 'Could not fetch comments');
         }
         return response.data || [];
+    },
+
+    async downloadFile(submissionId) {
+        return await api.submissions.downloadFile(submissionId);
     }
 };
 

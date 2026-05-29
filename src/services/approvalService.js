@@ -98,19 +98,38 @@ const approvalService = {
     },
 
     /**
-     * Pending project requests — not a distinct backend concept.
-     * Returns an empty array (manager uses /projects/department/:dept instead).
+     * Get pending project requests — maps to backend TeamLeaderRequest.
      */
     async getPendingProjectRequests() {
-        return [];
+        const response = await api.manager.getPendingTLRequests();
+        if (!response.ok) {
+            throw new Error(response.error?.message || 'Could not fetch project requests');
+        }
+        return (response.data || []).map(r => ({
+            id: r.id,
+            projectName: r.projectName || '',
+            description: '',
+            requesterName: r.requesterName || 'Unknown',
+            priority: 'MEDIUM',
+            requiredTeamSize: 1,
+            deadline: null,
+            notes: '',
+            status: r.status || 'PENDING'
+        }));
     },
 
-    async approveProjectRequest(_requestId) {
-        // No-op in real backend — projects exist once created.
+    async approveProjectRequest(requestId) {
+        const response = await api.manager.approveTL(requestId);
+        if (!response.ok) {
+            throw new Error(response.error?.message || 'Could not approve project request');
+        }
     },
 
-    async rejectProjectRequest(_requestId, _reason) {
-        // No-op in real backend.
+    async rejectProjectRequest(requestId, reason) {
+        const response = await api.manager.rejectTL(requestId);
+        if (!response.ok) {
+            throw new Error(response.error?.message || 'Could not reject project request');
+        }
     },
 
     // ============ PROJECT QUERIES ============
@@ -195,7 +214,7 @@ const approvalService = {
             id: u.id,
             name: u.fullName || u.name,
             email: u.email,
-            completionRate: 0,
+            timeWorkedToday: 0,
             status: u.status === 'ACTIVE' ? 'Active' : 'Offline'
         }));
     }

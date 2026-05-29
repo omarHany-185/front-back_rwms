@@ -17,4 +17,5 @@ public class SubmissionResponse {
     private LocalDateTime submittedAt;
     private String reviewStatus;
     private String rejectionReason;
+    private String adminNote;
 }

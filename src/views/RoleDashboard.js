@@ -75,8 +75,6 @@ function truncateText(text, length) {
     return text.substring(0, length) + '...';
 }
 
-const SUBMIT_TRIGGER_SECONDS = 30;
-
 const InteractiveRoleDashboard = {
     name: 'RoleDashboard',
     props: {
@@ -114,13 +112,16 @@ const InteractiveRoleDashboard = {
                 .join('') || 'RW';
         },
         assignedTasks() {
+            return safeList(this.state.assignedTasks).filter(t => !['SUBMITTED','APPROVED','REJECTED'].includes(t.status));
+        },
+        assignedTasksAll() {
             return safeList(this.state.assignedTasks);
         },
         activeTask() {
             return this.state.activeTask;
         },
         canSubmitActiveTask() {
-            if (!this.activeTask?.subtasks?.length) return false;
+            if (!this.activeTask?.subtasks?.length) return true;
             return this.activeTask.subtasks.every(s => s.completedByEmployee === true);
         },
         pendingSubmissions() {
@@ -184,7 +185,8 @@ const InteractiveRoleDashboard = {
         pauseShift() {
             appController.pauseShift();
         },
-        endShiftAndMaybeSubmit() {
+        async endShiftAndMaybeSubmit() {
+            await appController.endBackendTimer();
             appController.stopTimer();
             if (this.canSubmitActiveTask) {
                 appController.openSubmissionModal();
@@ -219,6 +221,9 @@ const InteractiveRoleDashboard = {
         closeReview() {
             appController.closeReviewModal();
         },
+        downloadAttachment(submissionId) {
+            appController.downloadAttachment(submissionId);
+        },
         reviewActiveSubmission() {
             return appController.reviewActiveSubmission();
         },
@@ -237,16 +242,15 @@ const InteractiveRoleDashboard = {
         rejectTLRequest(requestId) {
             appController.rejectTLRequest(requestId);
         },
+        onFileChange(event) {
+            const file = event.target.files[0];
+            this.state.submissionForm.fileName = file?.name || null;
+            appController.state.submissionFile = file;
+        },
         syncTimerManual() {
             if (!this.state.timerRunning) return;
             this.state.shiftTime += 5;
             this.state.activeWorkTime += 5;
-            if (this.state.shiftTime >= SUBMIT_TRIGGER_SECONDS) {
-                appController.stopTimer();
-                if (this.canSubmitActiveTask) {
-                    appController.openSubmissionModal();
-                }
-            }
         },
         // NEW: TL project request
         openProjectRequestModal() {
@@ -450,10 +454,10 @@ const InteractiveRoleDashboard = {
                   </div>
 
                   <div class="timer-actions">
-                    <button class="btn btn-primary" type="button" @click="startShift" :disabled="state.timerRunning || !activeTask">
-                      Start timer
+                    <button class="btn btn-primary" type="button" @click="startShift" :disabled="state.timerRunning || !activeTask || ['SUBMITTED','APPROVED','REJECTED'].includes(activeTask.status)">
+                      {{ state.timerPaused ? 'Resume timer' : 'Start timer' }}
                     </button>
-                    <button class="btn btn-secondary" type="button" @click="openSubmissionModal" :disabled="!canSubmitActiveTask || state.timerRunning">
+                    <button class="btn btn-secondary" type="button" @click="openSubmissionModal" :disabled="!canSubmitActiveTask || state.timerRunning || ['SUBMITTED','APPROVED','REJECTED','PENDING'].includes(activeTask?.status)">
                       Submit task
                     </button>
                   </div>
@@ -478,7 +482,7 @@ const InteractiveRoleDashboard = {
                   <div class="actions-row">
                     <span class="badge" :class="badgeClassFor(t.status)">{{ t.status }}</span>
                     <button class="btn btn-sm btn-secondary" type="button" @click="openTaskDetails(t)">Details</button>
-                    <button class="btn btn-sm btn-primary" type="button" @click="openTask(t.id)">Open</button>
+                    <button class="btn btn-sm btn-primary" type="button" @click="openTask(t.id)" :disabled="['SUBMITTED','APPROVED','REJECTED'].includes(t.status)">Open</button>
                   </div>
                 </article>
               </div>
@@ -523,7 +527,7 @@ const InteractiveRoleDashboard = {
               </div>
 
               <div class="timer-actions">
-                <button class="btn btn-primary" type="button" @click="startShift" :disabled="state.timerRunning || !activeTask">Start</button>
+                <button class="btn btn-primary" type="button" @click="startShift" :disabled="state.timerRunning || !activeTask">{{ state.timerPaused ? 'Resume' : 'Start' }}</button>
                 <button class="btn btn-secondary" type="button" @click="pauseShift" :disabled="!state.timerRunning">Pause</button>
                 <button class="btn btn-secondary" type="button" @click="endShiftAndMaybeSubmit" :disabled="!state.timerRunning">End & Submit</button>
               </div>
@@ -550,10 +554,43 @@ const InteractiveRoleDashboard = {
                     <p>{{ p.description }}</p>
                     <small>Team leader: {{ p.teamLeader?.fullName || 'Unassigned' }} • {{ safeList(p.contributors).length }} contributors</small>
                   </div>
-                  <span class="badge badge-active">ACTIVE</span>
+                    <span class="badge badge-active">ACTIVE</span>
                 </article>
                 <article v-if="!safeList(state.myProjects).length" class="no-active-task">
                   Not assigned to any projects yet.
+                </article>
+              </div>
+            </article>
+
+            <!-- Employee: My Submissions -->
+            <article class="card dashboard-panel">
+              <div class="dashboard-panel-header">
+                <div>
+                  <span class="section-eyebrow">Submission history</span>
+                  <h3>Your submitted work</h3>
+                </div>
+                <p>Review status and feedback from your team leader.</p>
+              </div>
+
+              <div class="dashboard-list">
+                <article
+                  v-for="s in safeList(state.mySubmissions)"
+                  :key="s.id"
+                  class="dashboard-list-item"
+                >
+                  <div class="dashboard-list-item-copy">
+                    <h4>{{ s.taskName }}</h4>
+                    <p v-if="s.rejectionReason">Rejection: {{ s.rejectionReason }}</p>
+                    <p v-if="s.adminNote">Note: {{ s.adminNote }}</p>
+                    <small>Submitted {{ s.submittedAt }}</small>
+                  </div>
+                  <div class="actions-row">
+                    <span class="badge" :class="badgeClassFor(s.reviewStatus)">{{ s.reviewStatus }}</span>
+                    <button class="btn btn-sm btn-secondary" type="button" @click="openReview(s.id)">Details</button>
+                  </div>
+                </article>
+                <article v-if="!safeList(state.mySubmissions).length" class="no-active-task">
+                  No submissions yet.
                 </article>
               </div>
             </article>
@@ -690,10 +727,10 @@ const InteractiveRoleDashboard = {
                 >
                   <div class="dashboard-list-item-copy">
                     <h4>{{ m.name }}</h4>
-                    <p>Completion: {{ m.completionRate ?? 0 }}%</p>
-                    <small>{{ m.status || 'Active' }}</small>
+                    <p>Time worked today: {{ formatDuration(m.timeWorkedToday ?? 0) }}</p>
+                    <small>{{ m.email || '' }} • {{ m.workingStatus || 'Online' }}</small>
                   </div>
-                  <span class="badge" :class="badgeClassFor(m.status)">{{ m.status || 'ACTIVE' }}</span>
+                  <span class="badge" :class="badgeClassFor(m.workingStatus || 'Online')">{{ m.workingStatus || 'Online' }}</span>
                 </article>
                 <article v-if="!safeList(state.teamMembers).length" class="no-active-task">
                   No team members yet. Assign employees to your projects.
@@ -930,12 +967,16 @@ const InteractiveRoleDashboard = {
                 <input
                   id="submissionFile"
                   type="file"
-                  @change="state.submissionForm.file = $event.target.files[0]"
+                  @change="onFileChange($event)"
                 />
+                <small v-if="state.submissionForm.fileName" style="display:block; margin-top:4px; color:var(--rwms-text-muted);">
+                  Selected: {{ state.submissionForm.fileName }}
+                </small>
               </div>
 
               <div class="timer-actions">
                 <button class="btn btn-primary" type="button" :disabled="state.submissionBusy" @click="submitActiveTask">
+                  <span v-if="state.submissionBusy" class="rwms-spinner"></span>
                   {{ state.submissionBusy ? 'Submitting...' : 'Submit' }}
                 </button>
                 <button class="btn btn-secondary" type="button" :disabled="state.submissionBusy" @click="closeSubmissionModal">
@@ -971,10 +1012,26 @@ const InteractiveRoleDashboard = {
                     {{ state.activeSubmissionDetail?.reviewStatus }}
                   </span>
                 </p>
+                <p v-if="state.activeSubmissionDetail?.rejectionReason">
+                  <strong>Rejection reason:</strong> {{ state.activeSubmissionDetail.rejectionReason }}
+                </p>
+                <p v-if="state.activeSubmissionDetail?.adminNote">
+                  <strong>Team Leader note:</strong> {{ state.activeSubmissionDetail.adminNote }}
+                </p>
+                <p v-if="state.activeSubmissionDetail?.attachmentPath">
+                  <button class="btn btn-primary" type="button" @click="downloadAttachment(state.activeSubmissionId)">
+                    View attachment
+                  </button>
+                </p>
+                <p v-if="state.activeSubmissionDetail?.alternativeGithubLink">
+                  <a :href="state.activeSubmissionDetail.alternativeGithubLink" target="_blank" class="btn btn-secondary">
+                    GitHub Link
+                  </a>
+                </p>
               </div>
 
               <div class="review-section">
-                <div class="review-decision-grid">
+                <div v-if="roleNorm === 'TEAM_LEADER'" class="review-decision-grid">
                   <h4>Decision</h4>
                   <div class="timer-actions">
                     <button class="btn btn-primary" type="button" @click="setReviewAction('APPROVED')" :disabled="state.reviewBusy">
@@ -986,14 +1043,14 @@ const InteractiveRoleDashboard = {
                   </div>
                 </div>
 
-                <div v-if="state.reviewForm.action === 'APPROVED'">
+                <div v-if="roleNorm === 'TEAM_LEADER' && state.reviewForm.action === 'APPROVED'">
                   <div class="form-group">
-                    <label for="adminNote">Admin note (optional)</label>
+                    <label for="adminNote">Team Leader note (optional)</label>
                     <textarea id="adminNote" v-model="state.reviewForm.adminNote" placeholder="Feedback for the employee..."></textarea>
                   </div>
                 </div>
 
-                <div v-else>
+                <div v-if="roleNorm === 'TEAM_LEADER' && state.reviewForm.action !== 'APPROVED'">
                   <div class="form-group">
                     <label for="rejectionReason">Rejection reason</label>
                     <textarea id="rejectionReason" v-model="state.reviewForm.rejectionReason" placeholder="Explain what to revise..."></textarea>
@@ -1031,7 +1088,7 @@ const InteractiveRoleDashboard = {
               </div>
 
               <div class="timer-actions">
-                <button class="btn btn-primary" type="button" :disabled="state.reviewBusy" @click="reviewActiveSubmission">
+                <button v-if="roleNorm === 'TEAM_LEADER'" class="btn btn-primary" type="button" :disabled="state.reviewBusy" @click="reviewActiveSubmission">
                   {{ state.reviewBusy ? 'Saving...' : (state.reviewForm.action === 'APPROVED' ? 'Save approval' : 'Save rejection') }}
                 </button>
                 <button class="btn btn-secondary" type="button" :disabled="state.reviewBusy" @click="closeReview">
