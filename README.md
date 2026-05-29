@@ -45,6 +45,7 @@ rwms-frontend/
 ├── index.html
 ├── webpack.config.js
 ├── package.json
+├── requirements.txt    # System prerequisites
 └── Remote-Work-Management-System/   # Spring Boot backend
     └── src/main/java/com/rwms/
         ├── auth/          # JWT authentication
@@ -57,40 +58,67 @@ rwms-frontend/
 
 ## Prerequisites
 
-- **Node.js** 18+ and npm
-- **Java** 17+ (JDK)
+See `requirements.txt` for full details. You need:
+
+- **Java JDK** 17+
+- **Maven** 3.8+ (or use bundled `mvnw.cmd`)
 - **MySQL** 8.0+
-- **Maven** 3.8+ (or use the bundled `mvnw.cmd`)
+- **Node.js** 18+
+- **npm** 9+
 
-## Setup
+## How to Run
 
-### 1. Database
+### Step 1: Database
 
-Create the MySQL database:
+Start MySQL and create the database:
 
 ```sql
 CREATE DATABASE rwms_db;
 ```
 
-Backend connects with `root/root` on `localhost:3306` by default (configurable in `application.properties`).
+Default connection: `root/root` on `localhost:3306`.  
+To change credentials, edit:  
+`Remote-Work-Management-System/src/main/resources/application.properties`
 
-### 2. Backend
+### Step 2: Start the Backend
 
-```bash
+Open a terminal (PowerShell or CMD) and run:
+
+```powershell
 cd Remote-Work-Management-System
 .\mvnw.cmd spring-boot:run
 ```
 
-The backend starts on `http://localhost:8080`. Hibernate `ddl-auto=update` creates tables automatically.
+- First run downloads Maven dependencies (may take a few minutes).
+- Backend starts at **http://localhost:8080**.
+- Hibernate `ddl-auto=update` creates database tables automatically.
+- **Keep this terminal open** while using the app.
 
-### 3. Frontend
+### Step 3: Start the Frontend
 
-```bash
+Open a **second terminal** and run:
+
+```powershell
+cd rwms-frontend
 npm install
-npm run dev       # Development server on port 3000 (proxied to backend)
-# OR
-npm run build     # Production build to dist/
+npm run dev
 ```
+
+- `npm install` only needed the first time (or when dependencies change).
+- Frontend dev server starts at **http://localhost:3000**.
+- API calls are proxied to the backend automatically.
+
+### Step 4: Open the App
+
+Go to **http://localhost:3000** in your browser.
+
+## Default Login Credentials
+
+| Email               | Password | Role         |
+|---------------------|----------|--------------|
+| manager@rwms.local  | (any)    | Manager      |
+| omar@company.com    | (any)    | Team Leader  |
+| omar@company1.com   | (any)    | Employee     |
 
 ## API Endpoints
 
@@ -129,6 +157,18 @@ npm run build     # Production build to dist/
 | POST   | /submissions/{id}/review| Review submission          |
 | POST   | /submissions/{id}/comments | Add comment             |
 
+### Projects
+| Method | Path                                      | Description                |
+|--------|-------------------------------------------|----------------------------|
+| GET    | /projects/all                             | All projects (Manager)     |
+| GET    | /projects/department/{dept}               | Projects by department     |
+| GET    | /projects/my                              | My projects                |
+| GET    | /projects/{id}                            | Project details            |
+| POST   | /projects                                 | Create project             |
+| POST   | /projects/{id}/contributors               | Add contributors           |
+| DELETE | /projects/{id}/contributors/{userId}      | Remove contributor         |
+| POST   | /projects/{id}/request-tl                 | Request team leader        |
+
 ### Users
 | Method | Path                    | Description                |
 |--------|-------------------------|----------------------------|
@@ -136,13 +176,13 @@ npm run build     # Production build to dist/
 | POST   | /users/{id}/approve     | Approve user               |
 | POST   | /users/{id}/reject      | Reject user                |
 
-## Login Credentials (dev defaults)
+## Workflow Overview
 
-| Email               | Role         |
-|---------------------|--------------|
-| manager@rwms.local  | Manager      |
-| omar@company.com    | Team Leader  |
-| omar@company1.com   | Employee     |
+1. **Manager** approves user registrations and project requests
+2. **Team Leader** creates projects, assigns employees, creates tasks with subtasks
+3. **Employee** opens assigned task, starts timer, completes subtasks, submits work with attachment
+4. **Team Leader** reviews submissions (approve/reject with notes)
+5. **Manager** oversees the entire organization
 
 ## License
 
