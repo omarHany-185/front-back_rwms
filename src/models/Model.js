@@ -52,7 +52,8 @@ export class RwmsModel {
             showProfileModal: false,
             profileForm: {
                 currentPassword: '',
-                newPassword: ''
+                newPassword: '',
+                confirmPassword: ''
             },
             profileBusy: false,
 

@@ -112,6 +112,17 @@ const App = {
                   />
                 </div>
 
+                <div class="form-group">
+                  <label for="profile-confirm-password">Confirm new password</label>
+                  <input
+                      id="profile-confirm-password"
+                      v-model="profileForm.confirmPassword"
+                      type="password"
+                      autocomplete="new-password"
+                      placeholder="Re-enter new password"
+                  />
+                </div>
+
                 <div class="timer-actions">
                   <button class="btn btn-primary" type="button" :disabled="profileBusy" @click="changePassword">
                     {{ profileBusy ? 'Updating...' : 'Update password' }}

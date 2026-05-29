@@ -286,16 +286,25 @@ export class RwmsController {
 
         const currentPassword = this.state.profileForm.currentPassword || '';
         const newPassword = this.state.profileForm.newPassword || '';
+        const confirmPassword = this.state.profileForm.confirmPassword || '';
 
-        if (!currentPassword || !newPassword) {
-            this.setAuthFeedback('Please fill in both password fields.', 'error');
+        if (!currentPassword || !newPassword || !confirmPassword) {
+            this.setAuthFeedback('Please fill in all password fields.', 'error');
+            return false;
+        }
+
+        if (newPassword !== confirmPassword) {
+            this.setAuthFeedback('New password and confirmation do not match.', 'error');
             return false;
         }
 
         this.state.profileBusy = true;
         try {
-            await userService.changePassword(currentPassword, newPassword);
+            await userService.changePassword(currentPassword, newPassword, confirmPassword);
             this.setAuthFeedback('Password updated successfully.', 'success');
+            this.state.profileForm.currentPassword = '';
+            this.state.profileForm.newPassword = '';
+            this.state.profileForm.confirmPassword = '';
             this.closeProfile();
             return true;
         } catch (error) {

@@ -78,8 +78,8 @@ const userService = {
     /**
      * Change the current user's password.
      */
-    async changePassword(currentPassword, newPassword) {
-        const response = await api.auth.changePassword({ currentPassword, newPassword });
+    async changePassword(currentPassword, newPassword, confirmPassword) {
+        const response = await api.auth.changePassword({ currentPassword, newPassword, confirmPassword });
         if (!response.ok) {
             throw new Error(response.error?.message || 'Could not change password.');
         }

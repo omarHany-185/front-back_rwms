@@ -131,6 +131,8 @@ const LoginComponent = {
                           v-model="signupForm.phone"
                           type="text"
                           placeholder="+1234567890"
+                          maxlength="20"
+                          @input="signupForm.phone = signupForm.phone.replace(/[^0-9+]/g, '')"
                       />
                     </div>
                   </div>
