@@ -401,9 +401,21 @@ export class RwmsController {
 
         // If resuming from pause, skip backend calls (task+session already exist)
         if (this.state.timerPaused) {
+            try { await taskService.resumeTimer(); } catch (_) {}
             this.state.timerRunning = true;
             this.state.timerStatus = 'Active';
             this.state.timerPaused = false;
+            // Restore activeTask from assignedTasks if it went null
+            if (!this.state.activeTask && this.state.assignedTasks?.length) {
+                const session = await taskService.getActiveSession().catch(() => null);
+                if (session?.taskId) {
+                    const found = this.state.assignedTasks.find(t => t.id === session.taskId);
+                    if (found) {
+                        this.state.activeTask = found;
+                        this.state.activeTaskIndex = this.state.assignedTasks.indexOf(found);
+                    }
+                }
+            }
             if (!this.timerInterval) {
                 this.startTimerInterval();
             }
@@ -419,13 +431,20 @@ export class RwmsController {
             await taskService.startTimer(activeTaskId);
             this.state.assignedTasks = await taskService.getMyTasks();
         } catch (e) {
-            const stuck = (this.state.assignedTasks || []).find(t => t.status === 'IN_PROGRESS');
-            const msg = stuck
-                ? `Cannot start — task "${stuck.title}" (ID: ${stuck.id}) is already IN_PROGRESS. Submit or cancel it first.`
-                : (e.message || 'Could not start task.');
-            this.setAuthFeedback(msg, 'error');
-            console.error('Start task error:', e);
-            return;
+            // If startTask succeeded but startTimer failed due to existing session,
+            // still allow the local timer (session from a previous incomplete start)
+            const msg = e.message || '';
+            if (msg.includes('active session already exists')) {
+                // Continue with local timer - session already exists
+            } else {
+                const stuck = (this.state.assignedTasks || []).find(t => t.status === 'IN_PROGRESS');
+                const errMsg = stuck
+                    ? `Cannot start — task "${stuck.title}" (ID: ${stuck.id}) is already IN_PROGRESS. Submit or cancel it first.`
+                    : (e.message || 'Could not start task.');
+                this.setAuthFeedback(errMsg, 'error');
+                console.error('Start task error:', e);
+                return;
+            }
         }
 
         this.state.activeTaskIndex = this.state.assignedTasks.findIndex(t => t.id === activeTaskId);
@@ -452,6 +471,12 @@ export class RwmsController {
             if (this.state.timerRunning) {
                 this.state.shiftTime++;
                 this.state.activeWorkTime++;
+                // Auto-stop after 8 hours (28800 seconds)
+                if (this.state.shiftTime >= 28800) {
+                    this.stopSession();
+                    this.setAuthFeedback('8-hour work limit reached. Session ended.', 'info');
+                    return;
+                }
             } else if (this.state.timerPaused) {
                 this.state.shiftTime++;
                 this.state.breakTime++;
@@ -468,9 +493,28 @@ export class RwmsController {
     async pauseShift() {
         // Sync timer with backend before pausing
         try { await taskService.syncTimer(); } catch (_) {}
+        try { await taskService.pauseTimer(); } catch (_) {}
         this.state.timerRunning = false;
         this.state.timerPaused = true;
         this.state.timerStatus = 'Paused';
+        // Defensive: restore activeTask from assignedTasks if it went null
+        if (!this.state.activeTask && this.state.assignedTasks?.length) {
+            const session = await taskService.getActiveSession().catch(() => null);
+            if (session?.taskId) {
+                const found = this.state.assignedTasks.find(t => t.id === session.taskId);
+                if (found) {
+                    this.state.activeTask = found;
+                    this.state.activeTaskIndex = this.state.assignedTasks.indexOf(found);
+                }
+            }
+        }
+    }
+
+    async stopSession() {
+        try { await taskService.syncTimer(); } catch (_) {}
+        await this.endBackendTimer();
+        this.stopTimer();
+        this.setAuthFeedback('Session ended.', 'success');
     }
 
     stopTimer() {
@@ -574,6 +618,7 @@ export class RwmsController {
             }, this.state.submissionFile);
 
             this.closeSubmissionModal();
+            await this.endBackendTimer();
             await this.loadDashboardData(this.state.currentUser.id, this.state.currentRole);
 
             // Clear task focus after submission.

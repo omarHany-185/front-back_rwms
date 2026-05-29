@@ -180,10 +180,13 @@ const InteractiveRoleDashboard = {
         startShift() {
             const id = this.activeTask?.id;
             if (!id) return;
-            appController.startShift(id);
+            return appController.startShift(id);
         },
         pauseShift() {
-            appController.pauseShift();
+            return appController.pauseShift();
+        },
+        stopSession() {
+            return appController.stopSession();
         },
         async endShiftAndMaybeSubmit() {
             await appController.endBackendTimer();
@@ -529,6 +532,7 @@ const InteractiveRoleDashboard = {
               <div class="timer-actions">
                 <button class="btn btn-primary" type="button" @click="startShift" :disabled="state.timerRunning || !activeTask">{{ state.timerPaused ? 'Resume' : 'Start' }}</button>
                 <button class="btn btn-secondary" type="button" @click="pauseShift" :disabled="!state.timerRunning">Pause</button>
+                <button class="btn btn-danger" type="button" @click="stopSession" :disabled="!state.timerRunning && !state.timerPaused">Stop</button>
                 <button class="btn btn-secondary" type="button" @click="endShiftAndMaybeSubmit" :disabled="!state.timerRunning">End & Submit</button>
               </div>
             </article>

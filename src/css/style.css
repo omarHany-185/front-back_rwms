@@ -109,6 +109,15 @@ button:active, .btn:active {
     background-color: #5a6268;
 }
 
+.btn-danger {
+    background-color: #dc2626;
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #b91c1c;
+}
+
 button:disabled, .btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
@@ -273,12 +282,16 @@ label {
 
 .timer-actions {
     display: flex;
-    gap: 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
     margin-top: 1.5rem;
 }
 
 .timer-actions button {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 120px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
 }
 
 /* ============================================
@@ -1386,6 +1399,7 @@ tbody tr.active {
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    padding-bottom: 0.5rem;
 }
 
 .dashboard-panel-header {

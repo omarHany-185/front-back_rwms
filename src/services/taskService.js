@@ -173,6 +173,22 @@ const taskService = {
         }
     },
 
+    async pauseTimer() {
+        const response = await api.timer.pause();
+        if (!response.ok) {
+            throw new Error(response.error?.message || 'Could not pause timer');
+        }
+        return response.data;
+    },
+
+    async resumeTimer() {
+        const response = await api.timer.resume();
+        if (!response.ok) {
+            throw new Error(response.error?.message || 'Could not resume timer');
+        }
+        return response.data;
+    },
+
     async getTeamWorkStatus(employeeIds) {
         const response = await api.timer.getTeamStatus(employeeIds);
         if (!response.ok) {

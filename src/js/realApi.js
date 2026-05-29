@@ -148,6 +148,8 @@ export function createRealApi({ baseURL = DEFAULT_BASE_URL } = {}) {
             getActive: () => axiosInstance.get('/timer/active'),
             sync: () => axiosInstance.post('/timer/sync'),
             end: () => axiosInstance.post('/timer/end'),
+            pause: () => axiosInstance.post('/timer/pause'),
+            resume: () => axiosInstance.post('/timer/resume'),
             getTeamStatus: (employeeIds) => axiosInstance.get('/timer/team', { params: { employeeIds: employeeIds.join(',') } })
         }
     };
