@@ -25,23 +25,32 @@ public class ProjectService implements IProjectService {
     private final UserRepository userRepository;
     private final TeamLeaderRequestRepository teamLeaderRequestRepository;
 
-    public ProjectService(ProjectRepository projectRepository, UserRepository userRepository, TeamLeaderRequestRepository teamLeaderRequestRepository) {
+    public ProjectService(ProjectRepository projectRepository, UserRepository userRepository,
+                          TeamLeaderRequestRepository teamLeaderRequestRepository) {
         this.projectRepository = projectRepository;
         this.userRepository = userRepository;
         this.teamLeaderRequestRepository = teamLeaderRequestRepository;
     }
 
     private ProjectResponse toResponse(Project project) {
-        // We will implement task counting in the ProgressService or update later.
-        // For now, taskCount and completedTaskCount are 0.
+        List<ProjectResponse.ContributorDto> contributors = project.getContributors().stream()
+                .map(u -> ProjectResponse.ContributorDto.builder()
+                        .id(u.getId())
+                        .fullName(u.getFullName())
+                        .email(u.getEmail())
+                        .build())
+                .collect(Collectors.toList());
+
         return ProjectResponse.builder()
                 .id(project.getId())
                 .name(project.getName())
                 .department(project.getDepartment())
                 .description(project.getDescription())
+                .status(project.getStatus().name())
                 .teamLeaderName(project.getTeamLeader() != null ? project.getTeamLeader().getFullName() : null)
-                .contributorCount(project.getContributors().size())
-                .taskCount(0) 
+                .contributorCount(contributors.size())
+                .contributors(contributors)
+                .taskCount(0)
                 .completedTaskCount(0)
                 .build();
     }
@@ -64,13 +73,25 @@ public class ProjectService implements IProjectService {
         User creator = userRepository.findByEmail(creatorEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + creatorEmail));
 
+        // Projects start as PENDING until a manager approves them.
         Project project = Project.builder()
                 .name(request.getName())
                 .department(request.getDepartment())
                 .description(request.getDescription())
+                .status(Project.Status.PENDING)
                 .teamLeader(creator)
                 .build();
-        return toResponse(projectRepository.save(project));
+        Project saved = projectRepository.save(project);
+
+        // Automatically create a TeamLeaderRequest so the manager sees it in the approval queue.
+        TeamLeaderRequest tlRequest = TeamLeaderRequest.builder()
+                .project(saved)
+                .requester(creator)
+                .status(TeamLeaderRequest.RequestStatus.PENDING)
+                .build();
+        teamLeaderRequestRepository.save(tlRequest);
+
+        return toResponse(saved);
     }
 
     @Override
@@ -86,12 +107,9 @@ public class ProjectService implements IProjectService {
         User user = userRepository.findByEmail(adminEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // Projects where user is team leader
         List<Project> asLeader = projectRepository.findByTeamLeaderId(user.getId());
-        // Projects where user is a contributor
         List<Project> asContributor = projectRepository.findByContributorsContaining(user);
 
-        // Merge and deduplicate by id
         java.util.Map<Long, Project> merged = new java.util.LinkedHashMap<>();
         asLeader.forEach(p -> merged.put(p.getId(), p));
         asContributor.forEach(p -> merged.putIfAbsent(p.getId(), p));
@@ -120,8 +138,7 @@ public class ProjectService implements IProjectService {
                 project.getContributors().add(user);
             }
         }
-        projectRepository.save(project);
-        return toResponse(project);
+        return toResponse(projectRepository.save(project));
     }
 
     @Override
@@ -132,8 +149,7 @@ public class ProjectService implements IProjectService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
 
         project.getContributors().remove(user);
-        projectRepository.save(project);
-        return toResponse(project);
+        return toResponse(projectRepository.save(project));
     }
 
     @Override
@@ -163,7 +179,7 @@ public class ProjectService implements IProjectService {
     public void approveTeamLeaderRequest(Long requestId) {
         TeamLeaderRequest request = teamLeaderRequestRepository.findById(requestId)
                 .orElseThrow(() -> new ResourceNotFoundException("Request not found: " + requestId));
-        
+
         if (request.getStatus() != TeamLeaderRequest.RequestStatus.PENDING) {
             throw new IllegalArgumentException("Request is not pending");
         }
@@ -171,7 +187,9 @@ public class ProjectService implements IProjectService {
         request.setStatus(TeamLeaderRequest.RequestStatus.APPROVED);
         teamLeaderRequestRepository.save(request);
 
+        // Activate the project and assign the team leader.
         Project project = request.getProject();
+        project.setStatus(Project.Status.ACTIVE);
         project.setTeamLeader(request.getRequester());
         projectRepository.save(project);
     }
@@ -180,7 +198,7 @@ public class ProjectService implements IProjectService {
     public void rejectTeamLeaderRequest(Long requestId) {
         TeamLeaderRequest request = teamLeaderRequestRepository.findById(requestId)
                 .orElseThrow(() -> new ResourceNotFoundException("Request not found: " + requestId));
-        
+
         if (request.getStatus() != TeamLeaderRequest.RequestStatus.PENDING) {
             throw new IllegalArgumentException("Request is not pending");
         }

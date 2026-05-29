@@ -17,6 +17,8 @@ import java.util.List;
 @AllArgsConstructor
 public class Project {
 
+    public enum Status { PENDING, ACTIVE }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -32,6 +34,11 @@ public class Project {
 
     @Column(nullable = true)
     private String descriptionPdfPath;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private Status status = Status.PENDING;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "team_leader_id", nullable = true)
