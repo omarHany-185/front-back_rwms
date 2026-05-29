@@ -34,6 +34,11 @@ public class ProjectController {
         return ResponseEntity.ok(projectService.getProjectsByDepartment(dept));
     }
 
+    @GetMapping("/all")
+    public ResponseEntity<List<ProjectResponse>> getAllProjects() {
+        return ResponseEntity.ok(projectService.getAllProjects());
+    }
+
     @GetMapping("/my")
     public ResponseEntity<List<ProjectResponse>> getMyProjects(@AuthenticationPrincipal User user) {
         return ResponseEntity.ok(projectService.getMyProjects(user.getEmail()));

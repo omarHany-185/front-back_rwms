@@ -142,6 +142,14 @@ const approvalService = {
         return response.data || [];
     },
 
+    async getAllProjects() {
+        const response = await api.projects.getAll();
+        if (!response.ok) {
+            throw new Error(response.error?.message || 'Could not fetch projects');
+        }
+        return response.data || [];
+    },
+
     async getMyProjects() {
         const response = await api.projects.getMy();
         if (!response.ok) {

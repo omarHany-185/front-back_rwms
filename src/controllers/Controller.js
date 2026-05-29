@@ -245,7 +245,7 @@ export class RwmsController {
                 const allUsers = await approvalService.getAllUsers();
                 this.state.teamMembers = allUsers.filter(u => u.role === 'EMPLOYEE' || u.role === 'TEAM_LEADER' || u.role === 'ADMIN');
 
-                this.state.projects = await approvalService.getProjectsByDepartment('Engineering');
+                this.state.projects = await approvalService.getAllProjects();
 
                 // Load pending project requests for manager review.
                 this.state.pendingProjectRequests = await approvalService.getPendingProjectRequests();

@@ -103,6 +103,14 @@ public class ProjectService implements IProjectService {
     }
 
     @Override
+    public List<ProjectResponse> getAllProjects() {
+        return projectRepository.findAll()
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public List<ProjectResponse> getMyProjects(String adminEmail) {
         User user = userRepository.findByEmail(adminEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));

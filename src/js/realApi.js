@@ -91,6 +91,7 @@ export function createRealApi({ baseURL = DEFAULT_BASE_URL } = {}) {
         projects: {
             create: (data) => axiosInstance.post('/projects', data),
             getByDepartment: (dept) => axiosInstance.get(`/projects/department/${dept}`),
+            getAll: () => axiosInstance.get('/projects/all'),
             getMy: () => axiosInstance.get('/projects/my'),
             getById: (id) => axiosInstance.get(`/projects/${id}`),
             addContributors: (projectId, userIds) =>

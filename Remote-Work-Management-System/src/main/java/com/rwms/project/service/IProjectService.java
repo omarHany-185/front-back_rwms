@@ -13,6 +13,8 @@ public interface IProjectService {
 
     List<ProjectResponse> getProjectsByDepartment(String department);
 
+    List<ProjectResponse> getAllProjects();
+
     List<ProjectResponse> getMyProjects(String adminEmail);
 
     ProjectResponse getProjectById(Long id);
