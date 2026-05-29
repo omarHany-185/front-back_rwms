@@ -1,0 +1,19 @@
+# RWMS - System Requirements
+# ============================
+# Install these before running the project.
+
+# --- Backend ---
+Java Development Kit (JDK)   17 or later
+Apache Maven                 3.8+  (or use bundled mvnw.cmd)
+MySQL Database               8.0+
+
+# --- Frontend ---
+Node.js                      18+
+npm                          9+
+
+# --- Database Setup ---
+# Run the following SQL to create the database:
+#   CREATE DATABASE rwms_db;
+#
+# Default connection: root/root @ localhost:3306
+# Configure in: Remote-Work-Management-System/src/main/resources/application.properties
